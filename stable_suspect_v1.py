@@ -12,22 +12,18 @@ from collections import Counter
 # MODELS
 # =====================================
 
-smoke_model = YOLO(
-    r"C:\Users\Home\Desktop\final\combined_smoke_dataset\best.pt"
-)
+smoke_model = YOLO("best.pt")
 
 vehicle_model = YOLO("yolov8n.pt")
 
-plate_model = YOLO(
-    r"C:\Users\Home\Desktop\final\combined_smoke_dataset\plate.pt"
-)
+plate_model = YOLO("plate.pt")
 reader = easyocr.Reader(['en'])
 
 # =====================================
 # INPUT VIDEO
 # =====================================
 
-video_path = r"C:\Users\Home\Downloads\WhatsApp Video 2026-06-22 at 10.49.27.mp4"
+
 
 # =====================================
 # OUTPUT FOLDERS
@@ -87,7 +83,23 @@ vehicle_classes = [
 # =====================================
 # HELPER FUNCTIONS
 # =====================================
+def send_event(
+    stable_id,
+    plate_number,
+    smoke_count,
+    time_string
+):
 
+    payload = {
+        "vehicle_id": stable_id,
+        "plate": plate_number,
+        "smoke_count": smoke_count,
+        "timestamp": time_string,
+        "event_type": "SMOKE_VIOLATION"
+    }
+
+    print("\nEVENT GENERATED")
+    print(payload)
 def center(box):
     x1, y1, x2, y2 = box
     return ((x1 + x2) // 2, (y1 + y2) // 2)
@@ -302,7 +314,14 @@ def read_plate_from_crop(plate_crop, stable_id):
 # VIDEO INPUT
 # =====================================
 
-cap = cv2.VideoCapture(video_path)
+USE_CAMERA = False
+
+video_path = r"C:\Users\E028.26\Downloads\WhatsApp Video 2026-06-21 at 12.31.03 PM.mp4"
+
+if USE_CAMERA:
+    cap = cv2.VideoCapture(0)
+else:
+    cap = cv2.VideoCapture(video_path)
 
 if not cap.isOpened():
     print("ERROR: Could not open video")
@@ -329,6 +348,9 @@ out = cv2.VideoWriter(
 )
 
 frame_no = 0
+recording = False
+video_writer = None
+current_vehicles = []
 
 # =====================================
 # MAIN LOOP
@@ -345,6 +367,16 @@ while True:
         print("Processing frame:", frame_no)
 
     used_ids_this_frame.clear()
+
+    # ----------------------
+    # Adaptive Processing
+    # ----------------------
+
+    processing_interval = 1
+
+    if frame_no % processing_interval != 0:
+        out.write(frame)
+        continue
 
     # ----------------------
     # Smoke Detection
@@ -439,7 +471,22 @@ while True:
 
         if suspect:
             color = (0, 0, 255)
-            label = f"SUSPECT Vehicle-{stable_id} {name}"
+            label = f"SUSPECT Vehicle-{stable_id}"
+
+            if not recording:
+                proof_path = os.path.join(
+                    evidence_dir,
+                    f"Vehicle_{stable_id}_proof.mp4"
+                )
+
+                video_writer = cv2.VideoWriter(
+                    proof_path,
+                    cv2.VideoWriter_fourcc(*"mp4v"),
+                    fps,
+                    (width, height)
+                )
+
+                recording = True
 
             if stable_id not in saved_suspects:
                 timestamp_sec = frame_no / fps
@@ -525,7 +572,15 @@ while True:
                         final_plate
                     ])
 
+                send_event(
+                    stable_id,
+                    final_plate,
+                    smoke_count,
+                    time_string
+                )
+
                 print(f"Suspect {stable_id} saved | Plate: {final_plate}")
+
                 saved_suspects.add(stable_id)
 
         else:
@@ -540,6 +595,16 @@ while True:
 
     out.write(frame)
 
+    if recording and video_writer is not None:
+        video_writer.write(frame)
+
+    cv2.imshow(
+        "Smoke Emission Monitor",
+        frame
+    )
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
 # =====================================
 # CLEANUP
 # =====================================
@@ -547,6 +612,10 @@ while True:
 cap.release()
 out.release()
 
+if video_writer is not None:
+    video_writer.release()
+
+cv2.destroyAllWindows()
 print()
 print("Finished Processing")
 print("Total suspects:", len(saved_suspects))
