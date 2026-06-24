@@ -556,7 +556,8 @@ while True:
                         frame_no,
                         final_plate
                     ])
-
+                if final_plate == "UNKNOWN":
+                    continue
                 save_violation(
                     vehicle_id=stable_id,
                     plate=final_plate,

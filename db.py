@@ -56,3 +56,28 @@ def save_violation(
 
     conn.commit()
     conn.close()
+def get_pending_events():
+    conn = sqlite3.connect(DB_NAME)
+
+    rows = conn.execute("""
+    SELECT *
+    FROM violations
+    WHERE status='PENDING'
+    """).fetchall()
+
+    conn.close()
+
+    return rows
+
+
+def mark_synced(event_id):
+    conn = sqlite3.connect(DB_NAME)
+
+    conn.execute("""
+    UPDATE violations
+    SET status='SYNCED'
+    WHERE id=?
+    """, (event_id,))
+
+    conn.commit()
+    conn.close()
