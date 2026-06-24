@@ -7,7 +7,8 @@ from collections import defaultdict, deque
 import easyocr
 import re
 from collections import Counter
-
+import requests
+from db import init_db, save_violation
 # =====================================
 # MODELS
 # =====================================
@@ -18,7 +19,7 @@ vehicle_model = YOLO("yolov8n.pt")
 
 plate_model = YOLO("plate.pt")
 reader = easyocr.Reader(['en'])
-
+init_db()
 # =====================================
 # INPUT VIDEO
 # =====================================
@@ -83,23 +84,7 @@ vehicle_classes = [
 # =====================================
 # HELPER FUNCTIONS
 # =====================================
-def send_event(
-    stable_id,
-    plate_number,
-    smoke_count,
-    time_string
-):
 
-    payload = {
-        "vehicle_id": stable_id,
-        "plate": plate_number,
-        "smoke_count": smoke_count,
-        "timestamp": time_string,
-        "event_type": "SMOKE_VIOLATION"
-    }
-
-    print("\nEVENT GENERATED")
-    print(payload)
 def center(box):
     x1, y1, x2, y2 = box
     return ((x1 + x2) // 2, (y1 + y2) // 2)
@@ -316,7 +301,7 @@ def read_plate_from_crop(plate_crop, stable_id):
 
 USE_CAMERA = False
 
-video_path = r"C:\Users\E028.26\Downloads\WhatsApp Video 2026-06-21 at 12.31.03 PM.mp4"
+video_path = r"C:\Users\nithy\Downloads\WhatsApp Video 2026-06-24 at 3.52.07 PM.mp4"
 
 if USE_CAMERA:
     cap = cv2.VideoCapture(0)
@@ -572,13 +557,15 @@ while True:
                         final_plate
                     ])
 
-                send_event(
-                    stable_id,
-                    final_plate,
-                    smoke_count,
-                    time_string
+                save_violation(
+                    vehicle_id=stable_id,
+                    plate=final_plate,
+                    timestamp=time_string,
+                    smoke_count=smoke_count,
+                    image_path=frame_path,
+                    video_path=proof_path
                 )
-
+                print(f"Saved Vehicle {stable_id} to SQLite")
                 print(f"Suspect {stable_id} saved | Plate: {final_plate}")
 
                 saved_suspects.add(stable_id)
@@ -598,13 +585,13 @@ while True:
     if recording and video_writer is not None:
         video_writer.write(frame)
 
-    cv2.imshow(
-        "Smoke Emission Monitor",
-        frame
-    )
+    #cv2.imshow(
+     #   "Smoke Emission Monitor",
+     #   frame
+    #)
 
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+    #if cv2.waitKey(1) & 0xFF == ord('q'):
+       # break
 # =====================================
 # CLEANUP
 # =====================================
@@ -615,7 +602,7 @@ out.release()
 if video_writer is not None:
     video_writer.release()
 
-cv2.destroyAllWindows()
+#cv2.destroyAllWindows()
 print()
 print("Finished Processing")
 print("Total suspects:", len(saved_suspects))
